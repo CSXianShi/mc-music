@@ -1,0 +1,44 @@
+name: Fetch four MusicBox songs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade yt-dlp
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Download official soundtrack audio
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          declare -A videos=(
+            [lose_my_mind]=VJxppgsHjF8
+            [drive]=qNTB02-sNJA
+            [just_keep_watching]=8ORKG0i07Dc
+            [messy]=PU-vcwjd-5Y
+          )
+          for id in lose_my_mind drive just_keep_watching messy; do
+            yt-dlp "https://www.youtube.com/watch?v=${videos[$id]}" \
+              --js-runtimes node --remote-components ejs:github \
+              -f bestaudio --no-playlist -o "output/$id.source.%(ext)s"
+            source_file="$(find output -maxdepth 1 -name "$id.source.*" | head -n 1)"
+            ffmpeg -y -hide_banner -loglevel error -i "$source_file" \
+              -vn -ac 1 -ar 44100 -c:a libvorbis -b:a 86k "output/$id.ogg"
+            ffprobe -v error -show_entries format=duration \
+              -of default=nw=1:nk=1 "output/$id.ogg"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musicbox-four-songs
+          path: output/*.ogg
+          retention-days: 1
